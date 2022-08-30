@@ -1,7 +1,8 @@
 /*
-  
-{+|-}?{0-9}*.{0-9}+{{e|E}{+|-}?{0-9}+}?
+Creating a finite state machine using the following pattern:
+    {+|-}?{0-9}*.{0-9}+{{e|E}{+|-}?{0-9}+}?
 
+    James Halladay, c. 8/30/22 
 */
 
 #include <iostream>
