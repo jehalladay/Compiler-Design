@@ -136,6 +136,7 @@ class Tokenizer {
 		  if (text[pos]=='\n') linepos++;
 		  pos++;
 	    }
+
 		if (text[pos]=='{') { 
 		  while (pos< text.size() && text[pos]!='}') {
 		    if (text[pos]=='\n') linepos++;
@@ -143,6 +144,7 @@ class Tokenizer {
 		  }
 		  pos++;		
 		}
+
 		char c=text[pos];
 		if (c=='\'') {
 			int offset=1;
@@ -155,7 +157,9 @@ class Tokenizer {
 			pos+=offset;
 			return retval;
 		}
+
 		if (pos>=text.size()) return Token(END_OF_TEXT,"");
+
 		if (c=='<' || c=='=' || c=='>') {
 			c=text[pos+1];
 			if (c=='=' || c=='>')
@@ -163,16 +167,22 @@ class Tokenizer {
 			else
 			  return Token(RELATIONAL_OPERATOR,text.substr(pos,1));
 		}
+
 		if (c=='(')
 			return Token(OPEN_PAREN,text.substr(pos,1));
+
 		if (c==')')
 			return Token(CLOSE_PAREN,text.substr(pos,1));
+
 		if (c=='+' || c=='-')
 			return Token(SIGN,text.substr(pos,1));
+
 		if (c=='*' || c=='/')
 			return Token(MULTIPLYING_OPERATOR,text.substr(pos,1));
+
 		if (c=='.')
 			return Token(DOT,text.substr(pos,1));
+
 		if (isdigit(c)) {
 			unsigned newpos=pos;
 			while (newpos<text.size() && isdigit(text[newpos]))
@@ -441,13 +451,31 @@ class ParserWholeEnchilada:public ParserTest{
 	}
 };
 
+class ParserWholeEnchilada2:public ParserTest{
+	public:
+	ParserWholeEnchilada2():ParserTest("WholeEnchilada.old.pas") {
+		name="UnsignedReal "+name;
+	}
+	bool doTest() {
+		int count=0;
+		while (p->peek().type!=END_OF_TEXT) {
+			cout << "Expression Count is "<< count << endl;
+			if (p->expression(p->getTokenizer())) {
+				count++;
+			}
+		}
+		return count==1;
+	}
+};
+
 
 bool runTests() {
-//	testcases.push_back(new TokenizerTest());
-//	testcases.push_back(new TokenizerTestGood());
-//	testcases.push_back(new ParserTestScaleFactor());
+	testcases.push_back(new TokenizerTest());
+	testcases.push_back(new TokenizerTestGood());
+	testcases.push_back(new ParserTestScaleFactor());
 //	testcases.push_back(new ParserTestUnsignedReal());
-	testcases.push_back(new ParserWholeEnchilada());
+	// testcases.push_back(new ParserWholeEnchilada());
+	// testcases.push_back(new ParserWholeEnchilada2());
 	bool success=true;
 	for (auto test:testcases)
 		if (!test->test()) success=false;

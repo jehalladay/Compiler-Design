@@ -50,6 +50,7 @@ enum TokenType{
 	END_OF_TEXT
 };
 
+// colors found here: https://stackoverflow.com/questions/2616906/how-do-i-output-coloured-text-to-a-linux-terminal
 string highlightRed(string s) {
 	return "\033[1;31m" + s + "\033[0m";
 }
@@ -124,7 +125,6 @@ class Token {
 			return out << "Token:" << tokenString(token.type) << ":" << token.value;
 		}
 
-		// string reprentation of the token
 		string toString() {
 			return tokenString(type) + ":" + value;
 		}
@@ -132,30 +132,60 @@ class Token {
 
 
 class Tokenizer {
+	bool verbose;
 	int charpos;
 	int linepos;
 	unsigned pos;
 	string text;
+	Token currentToken;
+	vector<Token> tokens;
 
 	public:
 		static string filename;
 
+		Tokenizer(bool verbose = false) {
+			verbose = verbose;
+			text = "";
+			currentToken = Token(UNRECOGNIZED, "Start of file");
+			tokens.push_back(currentToken);
+		}
+
+		void setVerbose(bool v) {
+			verbose = v;
+		}
+
+
 		bool error(string message) {
-			cerr << filename << ':' << linepos << ':' << message << endl;	
+			
+			if(verbose) {
+				cerr << highlightRed(
+					'\t' + 
+					filename + 
+					": " + 
+					to_string(linepos) + 
+					", " + 
+					to_string(charpos) + 
+					", " + 
+					to_string(pos) + 
+					": " + 
+					message
+				) << endl;
+			}
+			
 			return false;
 		}
 
+
 		bool message(string message) {
 			Token t = peek();
-			cout << linepos << ": " << message << ": Next Token " << t << t.value << " next text:" << text.substr(pos, 20) << endl;
-			// cout << text.size() << endl;
-			// cout << linepos << ": " << message << ": Next Token " << peek() << " next text:" << text.substr(pos,10) << endl;	
+
+			if(verbose) {
+				cout << linepos << ": " << message << "This Token: " << currentToken <<  ", Next Token: " << t << " next text:" << text.substr(pos, 10) << endl;
+			}
+			
 			return true;
 		}
 
-		Tokenizer(){
-			text = "";
-		}
 
 		void readFile(string newFilename) {
 			ifstream file(newFilename);
@@ -170,6 +200,7 @@ class Tokenizer {
 			charpos = 1;
 		}
 
+
 		void setText(string newText = "") {
 			text = newText;
 			pos = 0;
@@ -177,38 +208,47 @@ class Tokenizer {
 			charpos = 1;
 		}
 
+
 		Token next() {
 			// Keep track where we are in the text and produce the next token
 			Token p = peek();
+			
 			pos += p.value.size();
+			currentToken = p;
+			tokens.push_back(currentToken);
 
 			return p;
 		}
 
-		Token peek() {
+
+		/**
+		 * @brief produce the next token without consuming it
+		 * 
+		 * @return Token 
+		 */
+		Token peek(bool verbose = false) {
 			char c;
 
-			// produce what the next token will be but don't consume
-			//cout << "Next character is " << text[pos] << endl;
-			while (pos < text.size() && isspace(text[pos])) {
+			// Skip whitespace and comments delimited by curly braces, { or }
+			while (pos < text.size() && (isspace(text[pos]) || text[pos] == '{')) {
 				if (text[pos] == '\n') {
 					linepos++;
 				} 
 				
+				if (text[pos] == '{') {
+					while (pos < text.size() && text[pos] != '}') {
+						if (text[pos] == '\n') {
+							linepos++;
+						}
+						
+						pos++;
+					}
+				}
+
 				pos++;
 			}
 
-			if (text[pos] == '{') { 
-				while (pos < text.size() && text[pos] != '}') {
-					if (text[pos] == '\n') {
-						linepos++;
-					}
-
-					pos++;
-				}
-				pos++;		
-			}
-
+			// check for strings delimited by single quotes
 			c = text[pos];
 
 			if (c == '\'') {
@@ -232,10 +272,12 @@ class Tokenizer {
 				return retval;
 			}
 			
+			// check for end of text
 			if (pos >= text.size()) {
 				return Token(END_OF_TEXT,"");
 			} 
 
+			// check for relational operators
 			if (c == '<' || c == '=' || c == '>') {
 				c = text[pos + 1];
 				
@@ -246,26 +288,32 @@ class Tokenizer {
 				}
 			}
 
+			// check for left parentheses
 			if (c == '(') {
 				return Token(OPEN_PAREN, text.substr(pos, 1));
 			}
 
+			// check for right parentheses
 			if (c == ')') {
 				return Token(CLOSE_PAREN, text.substr(pos, 1));
 			}
 
+			// check for addition operators
 			if (c == '+' || c == '-') {
 				return Token(SIGN, text.substr(pos, 1));
 			}
-				
+
+			// check for multiplication operators	
 			if (c == '*' || c == '/') {
 				return Token(MULTIPLYING_OPERATOR, text.substr(pos, 1));
 			}
 
+			// check for . operator
 			if (c == '.') {
 				return Token(DOT, text.substr(pos, 1));
 			}
 
+			// check for unsigned integer
 			if (isdigit(c)) {
 				unsigned newpos = pos;
 
@@ -275,15 +323,17 @@ class Tokenizer {
 
 				return Token(UNSIGNED_INTEGER, text.substr(pos, newpos - pos));
 			}
-			
-			if (isalpha(c)) {
-				unsigned newpos = pos;
 
-				while (newpos < text.size() && isalnum(text[newpos])) {
-					newpos++;
+			// check for identifier
+			if (isalpha(c)) {
+				string value;
+				unsigned offset = 0;
+
+				while(pos + offset < text.size() && isalpha(text[pos + offset])) {
+					offset++;
 				}
 
-				string value = text.substr(pos, newpos - pos);
+				value = text.substr(pos, offset);
 
 				if (value == "E") {
 					return Token(E, value);
@@ -297,10 +347,20 @@ class Tokenizer {
 					return Token(ADDING_OPERATOR, value);
 				} 
 
+				while (pos + offset < text.size() && isalnum(text[pos + offset])) {
+					offset++;
+				}
+
+				value = text.substr(pos, offset);
+
 				return Token(IDENTIFIER, value);
 			}
 
-			return Token(UNRECOGNIZED, "");
+			return Token(UNRECOGNIZED, "Unrecognized token");
+		}
+
+		vector<Token> getTokens() {
+			return tokens;
 		}
 };
 
@@ -310,8 +370,8 @@ class Parser {
 	Tokenizer tokens;
 	
 	public:
-		Parser(string newFilename) { 
-			tokens = Tokenizer();
+		Parser(string newFilename, bool verbose = false) { 
+			tokens = Tokenizer(verbose);
 			tokens.readFile(newFilename); 
 		}
 
@@ -323,28 +383,49 @@ class Parser {
 			return tokens; 
 		}
 
+		void setVerbose(bool verbose) { 
+			tokens.setVerbose(verbose); 
+		}
+
+		/**
+		 * @brief parse expression
+		 * 
+		 * <expression> ::= 
+		 * 		<simple expression> | 
+		 * 		<simple expression> <relational operator> <simple expression>
+		 */
 		bool expression(Tokenizer &t) {
-			t.message("Parsing Expression next is ");
+			t.message("Parsing Expression: ");
 
 			if (simpleExpression(t)) {
 				if (t.peek().type == RELATIONAL_OPERATOR) {
 					t.next();
+
 					if (simpleExpression(t)) {
 						return t.message("Found Expression relational version");
 					} else {
 						return t.error("Expected a simple expression after relational operator");
 					} 
 				} else {
-					return t.message("!!Found Expression no relational");
+					return t.message("!!Found Expression not relational");
 				} 
 			} else {
 				return t.error("Expected an expression");
 			}
 		}
 
+		/**
+		 * @brief parse simple expression
+		 * 
+		 * <simple expression> ::= 
+		 * 		<term> | 
+		 * 		<sign> <term> | 
+		 * 		<term> <adding operator> <simple expression>
+		 */
 		bool simpleExpression(Tokenizer &t) {
-			t.message("Parsing Simple Expression next is ");
+			t.message("Parsing Simple Expression: ");
 			
+			// check for <sign> <term>
 			if (t.peek().type == SIGN) {
 				t.next();
 				if (term(t)) {
@@ -354,8 +435,10 @@ class Parser {
 				} 
 			}
 
+			// check for <term>
 			if (term(t)) {
-				while (t.peek().type == ADDING_OPERATOR  || t.peek().type == SIGN)  {
+				// while (t.peek().type == ADDING_OPERATOR  || t.peek().type == SIGN)  {
+				if(t.peek().type == ADDING_OPERATOR  || t.peek().type == SIGN)  {
 					t.next();
 
 					if (simpleExpression(t)) {
@@ -371,15 +454,37 @@ class Parser {
 			return true;
 		}
 
+		/**
+		 * @brief parse term
+		 * 
+		 * <term> ::= 
+		 * 		<factor> | 
+		 * 		<factor> <multiplying operator> <term> |
+		 * 		<factor> <sign> <term>
+		 */
 		bool term(Tokenizer &t) {
-			t.message("Parsing Term next is ");
+			t.message("Parsing Term: ");
 
+			// check for <factor> 
 			if (factor(t)) {
+
+				// check for <factor> <multiplying operator> <term> 
 				if (t.peek().type == MULTIPLYING_OPERATOR) {
 					t.next();
 
 					if (term(t)) {
 						return t.message("!!Found Term after Multiplying Operator");
+					} else {
+						return t.error("Missing term");
+					} 
+				}
+
+				// check for <factor> <sign> <term>, added by me not Castleton
+				if (t.peek().type == SIGN) {
+					t.next();
+
+					if (term(t)) {
+						return t.message("!!Found Term after sign");
 					} else {
 						return t.error("Missing term");
 					} 
@@ -391,11 +496,20 @@ class Parser {
 			return t.error("Expected a term");
 		}
 
-		bool factor(Tokenizer &t) { /// Yeah Recursion !!!!
-			Tokenizer temp = t;
 
-			t.message("Parsing Factor next is ");
+		/**
+		 * @brief parse factor
+		 * 
+		 * <factor> ::= 
+		 * 		<variable> | 
+		 * 		<unsigned constant> | 
+		 * 		( <expression> )
+		 */
+		bool factor(Tokenizer &t) {
+
+			t.message("Parsing Factor: ");
 			
+			// check for ( <expression> )
 			if (t.peek().type == OPEN_PAREN) {
 				t.next();
 
@@ -409,28 +523,33 @@ class Parser {
 				return t.error("Expected an expression");
 			}
 
-			if (variable(temp)) {
-				t = temp;
-
+			// check for <variable>
+			if (variable(t)) {
 				return t.message("!!Found Factor variable");
 			}
 
-			temp = t;
-
-			if (unsignedConstant(temp)) {
-				t = temp;
-
+			// check for <unsigned constant>
+			if (unsignedConstant(t)) {
 				return t.message("!!Found Factor unsigned constant");
 			}
 
 			return t.error("Expected (Expression), Variable, Unsigned Constant");
 		}
 
+
+		/**
+		 * @brief parse variable
+		 * 
+		 * <scale factor> ::= 
+		 * 		<unsigned integer> | 
+		 * 		<sign> <unsigned integer>
+		 */ 
 		bool scaleFactor(Tokenizer &t) {
 			Token tok = t.next();
 
-			t.message("Parsing Scale Factor next is ");
+			t.message("Parsing Scale Factor: ");
 
+			// check for <sign> <unsigned integer>
 			if (tok.type == SIGN) {
 				tok = t.next();
 				
@@ -441,6 +560,7 @@ class Parser {
 				return t.error("Sign was not followed by unsigned integer");
 			}
 
+			// check for <unsigned integer>
 			if (tok.type == UNSIGNED_INTEGER) {
 				return t.message("!!Found Scale Factor no sign");
 			} 
@@ -448,35 +568,48 @@ class Parser {
 			return t.error("Neither Sign or Unsigned Integer Present");
 		}
 
+
+		/**
+		 * @brief parse unsigned constant
+		 * 
+		 *  <unsigned constant> ::=
+		 * 		<unsigned number> |
+		 * 		<string>
+		 */
 		bool unsignedConstant(Tokenizer &t) {
-			Tokenizer temp = t;
-			
 			t.message("Parsing Unsigned Constant");
 			
+			// check for <string>
 			if (t.peek().type == STRING) {
 				t.next();
+				
 				return t.message("!!Found unsigned constant String");
 			}
 			
-			if (unsignedNumber(temp)) {
-				t = temp;
+			// check for <unsigned number>
+			if (unsignedNumber(t)) {
 				return t.message("!!Found unsigned constant number");
 			}
 
 			return t.error("Expected a Unsigned Constant");
 		}
 
+		/** 
+		 * @brief parse unsigned number
+		 * 
+		 * <unsigned number> ::=
+		 * 		<unsigned integer> |
+		 * 		<unsigned real> 
+		 */
 		bool unsignedNumber(Tokenizer &t) {
-			Tokenizer temp = t;
-
 			t.message("Parsing unsigned number");
 
-			if (unsignedReal(temp)) {
-				t = temp;
-
+			// check for <unsigned real>
+			if (unsignedReal(t)) {
 				return t.message("!!Found unsigned number real");
 			}
 
+			// check for <unsigned integer>
 			if (t.peek().type == UNSIGNED_INTEGER) {
 				t.next();
 
@@ -486,9 +619,16 @@ class Parser {
 			return t.error("Expected a Unsigned Real or Unsigned Integer");
 		}
 
+		/**
+		 * @brief parse variable
+		 * 
+		 * <variable> ::=
+		 * 		<identifier>
+		 */
 		bool variable(Tokenizer &t) {
 			t.message("Parsing Variable");
 			
+			// check for <identifier>
 			if (t.next().type == IDENTIFIER) {
 				return t.message("!!Found Variable");
 			} else {
@@ -496,19 +636,33 @@ class Parser {
 			} 
 		}
 
+
+		/**
+		 * @brief parse unsigned real
+		 * 
+		 * <unsigned real> ::=
+		 * 		<unsigned integer> . <unsigned integer> |
+		 *  	<unsigned integer> . <unsigned integer> E <scale factor> |
+		 *  	<unsigned integer> E <scale factor>
+		 */
 		bool unsignedReal(Tokenizer &t) {
 			Token tok = t.next();
 
 			t.message("Parsing unsigned real");
 
+			// check for <unsigned integer>
 			if (tok.type == UNSIGNED_INTEGER) {
 				tok = t.next();
 
+				// check for <unsigned integer> .
 				if (tok.type == DOT) {
 					tok = t.next();
 
+					// check for <unsigned integer> . <unsigned integer>
 					if (tok.type == UNSIGNED_INTEGER) {
 						tok = t.peek();
+
+						// check for <unsigned integer> . <unsigned integer> E <scale factor>
 						if (tok.type == E) {
 							t.next();
 
@@ -523,6 +677,7 @@ class Parser {
 					}
 				}
 
+				// check for <unsigned integer> E <scale factor>
 				if (tok.type == E) {
 					if (scaleFactor(t)) {
 						return t.message("!!Found unsigned real with E");
@@ -549,22 +704,23 @@ class TestCase {
 		}
 
 
-		bool test() {
+		bool test(bool verbose = false) {
 			bool retval = false;
 
-			cout << highlightCyan("Starting Test: ") << highlightCyan(name) << endl << endl;
-			retval = doTest();
+			cout << highlightCyan("Start Test: ") << highlightCyan(name) << endl << endl;
+
+			retval = doTest(verbose);
 			
 			if (retval) {
-				cout << highlightGreen("Finishing Test: " + name + "->Passed") << endl << endl;
+				cout << highlightGreen("Finished Test: " + name + "->Passed") << endl << endl;
 			} else {
-				cout << highlightRed("Finishing Test: " + name + "->Failed") << endl << endl;
+				cout << highlightRed("Finished Test: " + name + "->Failed") << endl << endl;
 			}
 
 			return retval;
 		}
 
-		virtual bool doTest() = 0;
+		virtual bool doTest(bool verbose = false) = 0;
 };
 
 
@@ -637,6 +793,8 @@ class ParserTestScaleFactor: public ParserTest {
 
 		bool doTest() {
 			int count = 0;
+			bool status = false;
+			
 
 			while (p->peek().type != END_OF_TEXT) {
 				if (p->scaleFactor(p->getTokenizer())) {
@@ -644,7 +802,15 @@ class ParserTestScaleFactor: public ParserTest {
 				}
 			}
 
-			return count == 3;
+			status = count == 3;
+
+			if(!status) {
+				for(auto token: p->getTokenizer().getTokens()) {
+					cout << "Token: " << highlightYellow(token.toString()) << endl;
+				}
+			}
+
+			return status;
 		}
 };
 
@@ -655,6 +821,7 @@ class ParserTestUnsignedReal: public ParserTest {
 		}
 
 		bool doTest() {
+			bool status = false;
 			int count = 0;
 			
 			while (p->peek().type != END_OF_TEXT) {
@@ -663,44 +830,66 @@ class ParserTestUnsignedReal: public ParserTest {
 				}
 			}
 
-			return count == 1;
+			status = count == 1;
+
+			if(!status) {
+				for(auto token: p->getTokenizer().getTokens()) {
+					cout << "Token: " << highlightYellow(token.toString()) << endl;
+				}
+			}
+
+			return status;
 		}
 };
 
 class ParserWholeEnchilada: public ParserTest {
 	public:
-		ParserWholeEnchilada(): ParserTest("WholeEnchilada.pas") {
+		ParserWholeEnchilada(bool verbose = false): ParserTest("WholeEnchilada.pas") {
 			name = "UnsignedReal " + name;
 		}
 
-		bool doTest() {
+		bool doTest(bool verbose = false) {
+			bool status = false;
 			int count = 0;
+
+			p->setVerbose(verbose);
+
 			while (p->peek().type != END_OF_TEXT) {
-				cout << "Expression Count is " << count << endl;
+				if(verbose) {
+					cout << "Expression Count is " << count << endl;
+				}
 
 				if (p->expression(p->getTokenizer())) {
 					count++;
 				}
 			}
 
-			return count == 1;
+			status = count == 1;
+
+			if(!status && verbose) {
+				for(auto token: p->getTokenizer().getTokens()) {
+					cout << "Token: " << highlightYellow(token.toString()) << endl;
+				}
+			}
+
+			return status;
 		}
 };
 
 
 vector<TestCase *> testcases;
 
-bool runTests() {
+bool runTests(bool verbose = false) {
 	bool success = true;
 
 	// testcases.push_back(new TokenizerTest());
 	// testcases.push_back(new TokenizerTestGood());
-	//	testcases.push_back(new ParserTestScaleFactor());
-	//	testcases.push_back(new ParserTestUnsignedReal());
+		// testcases.push_back(new ParserTestScaleFactor());
+		// testcases.push_back(new ParserTestUnsignedReal());
 	testcases.push_back(new ParserWholeEnchilada());
 	
 	for (auto test:testcases) {
-		if (!test->test()) {
+		if (!test->test(verbose)) {
 			success = false;
 		} 
 	}
@@ -723,15 +912,20 @@ bool runTests() {
 
 int main(int argc, char **argv) {
     int status = 0;
+	bool verbose = false;
 
 	if (argc < 2) {
 		cerr << "Expression <filename>" << endl;
 		return -1;
 	}
 
+	if (argc > 2) {
+		verbose = bool(atoi(argv[2]));
+	}
+
     Parser p(argv[1]);
     
-	if(!runTests()) {
+	if(!runTests(verbose)) {
 		status = 1;
 	} 
 		
