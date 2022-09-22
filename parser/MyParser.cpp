@@ -724,7 +724,7 @@ class TestCase {
 };
 
 
-class TokenizerTest: public TestCase {  // Tokenizer Test at most 100 tokens
+class TokenizerTest: public TestCase { 
 	protected:
 		string text;
 		bool shouldFail;
@@ -915,7 +915,7 @@ int main(int argc, char **argv) {
 	bool verbose = false;
 
 	if (argc < 2) {
-		cerr << "Expression <filename>" << endl;
+		cerr << "Missing an argument: <filename>" << endl;
 		return -1;
 	}
 
